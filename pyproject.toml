@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "better-web3-scripts"
+version = "1.0.0"
+description = "Web3.py tools and scripts"
+authors = ["Alen <alen.kimov@gmail.com>"]
+readme = "README.md"
+packages = [{include = "scripts"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+better-web3 = "^1.3.1"
+questionary = "^1.10.0"
+tqdm = "^4.65.0"
+loguru = "^0.7.0"
+pydantic = "^2.0.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

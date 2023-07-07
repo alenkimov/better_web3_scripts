@@ -1,0 +1,8 @@
+.idea
+poetry.lock
+dist
+log
+input
+output
+config/*
+!config/default
