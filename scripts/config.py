@@ -1,4 +1,4 @@
-from better_web3.utils.file import load_toml
+from better_web3.utils import load_toml
 from pydantic import BaseModel
 
 from ._logger import LoggingLevel

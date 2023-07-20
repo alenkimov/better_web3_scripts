@@ -1,44 +1,43 @@
+import asyncio
 import os
 import webbrowser
+from typing import Iterable
 
+import aiohttp
 import questionary
 import tqdm
+from tqdm.asyncio import tqdm as async_tqdm
 from better_web3 import Chain
-from better_web3.utils.file import write_lines
-from better_web3.wallet import addresses_from_file, wallets_from_file, Wallet
+from better_web3.utils import write_lines, addresses_from_file
+from better_web3 import Wallet
 from eth_typing import ChecksumAddress
 from eth_utils import to_wei, from_wei
 from web3.types import Wei
 
-from .chains import CHAINS as _CHAINS
+
 from .config import CONFIG
 from .logger import logger
 from .paths import INPUT_DIR, OUTPUT_DIR
+from .proxy import Proxy, ProxyInfo
+from ._scripts import process_proxies, curry_async, ask_chain, ask_private_key
 
+PROXIES_TXT = INPUT_DIR / "proxies.txt"
 ADDRESSES_TXT = INPUT_DIR / "addresses.txt"
 PRIVATE_KEYS_TXT = INPUT_DIR / "private_keys.txt"
 
-INPUT_FILES = [ADDRESSES_TXT, PRIVATE_KEYS_TXT]
+INPUT_FILES = [PROXIES_TXT, ADDRESSES_TXT, PRIVATE_KEYS_TXT]
 
 for filepath in INPUT_FILES:
     filepath.touch(exist_ok=True)
 
+PROXIES = Proxy.from_file(PROXIES_TXT)
+logger.info(f"Proxies: {len(PROXIES)}")
+
 ADDRESSES = addresses_from_file(ADDRESSES_TXT)
 logger.info(f"Addresses: {len(ADDRESSES)}")
 
-WALLETS = wallets_from_file(PRIVATE_KEYS_TXT)
+WALLETS = Wallet.from_file(PRIVATE_KEYS_TXT)
 logger.info(f"Private keys: {len(WALLETS)}")
-
-CHAINS = {chain.name: chain for chain in _CHAINS.values()}
-
-
-def ask_chain() -> Chain:
-    chain_name = questionary.select(f"Choose a chain:", choices=CHAINS).ask()
-    return CHAINS[chain_name]
-
-
-def ask_private_key() -> str:
-    return questionary.password(f"Enter a private key:").ask()
 
 
 def native_token_balances():
@@ -69,7 +68,7 @@ def native_token_balances():
         webbrowser.open(balances_txt)
 
 
-def _transfer_native_tokens(
+def transfer_native_tokens(
         chain: Chain,
         wallets_from: list[Wallet],
         addresses_to: list[ChecksumAddress],
@@ -161,7 +160,7 @@ def private_keys_to_address():
 
 
 def generate_wallets():
-    value = questionary.text(f"Enter value (int):").ask()
+    value = questionary.text(f"Enter count (int):").ask()
     try:
         count = int(value)
     except ValueError:
@@ -169,11 +168,25 @@ def generate_wallets():
         return
 
     wallets_txt = OUTPUT_DIR / "wallets.txt"
-    wallets = []
-    for _ in tqdm.trange(count):
-        wallets.append(Wallet.generate())
+    wallets = [Wallet.generate() for _ in tqdm.trange(count)]
     write_lines(wallets_txt, [f"{wallet.private_key}:{wallet.address}" for wallet in wallets])
     logger.success(f"Wallets data saved here: {wallets_txt}")
 
     if CONFIG.AUTO_OPEN:
         webbrowser.open(wallets_txt)
+
+
+async def request_and_set_proxy_info(session: aiohttp.ClientSession, proxy: Proxy):
+    async with session.get(f"https://ipapi.co/json/", proxy=proxy.as_url) as response:
+        data = await response.json()
+        proxy.info = ProxyInfo(**data)
+        logger.success(f"{proxy} {proxy.info.country_name}")
+
+
+async def request_proxies_info_aiohttp(proxies: Iterable[Proxy]):
+    async with aiohttp.ClientSession() as session:
+        await process_proxies(proxies, await curry_async(request_and_set_proxy_info)(session))
+
+
+def check_proxies():
+    asyncio.run(request_proxies_info_aiohttp(PROXIES))

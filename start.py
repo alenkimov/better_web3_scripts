@@ -5,11 +5,13 @@ from scripts.scripts import (
     private_keys_to_address,
     disperse_native_tokens,
     native_token_balances,
+    check_proxies,
 )
 
 
 MODULES = {
     "Generate wallets": generate_wallets,
+    "Check proxies": check_proxies,
     "Private keys to addresses": private_keys_to_address,
     "Disperse native tokens": disperse_native_tokens,
     "Native token balances": native_token_balances,

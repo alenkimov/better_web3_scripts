@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from better_web3.utils.file import copy_file
+from better_web3.utils import copy_file
 
 SCRIPT_DIR = Path(__file__).parent
 BASE_DIR = SCRIPT_DIR.parent

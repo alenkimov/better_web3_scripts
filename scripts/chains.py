@@ -1,5 +1,5 @@
 from better_web3 import Chain
-from better_web3.utils.file import load_toml
+from better_web3.utils import load_toml
 from eth_utils import to_wei
 
 from .paths import CHAINS_TOML
