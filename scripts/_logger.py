@@ -6,7 +6,7 @@ from typing import Literal
 from loguru import logger
 from tqdm.asyncio import tqdm
 
-LoggingLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"]
+LoggingLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "SUCCESS"]
 
 FILE_LOG_FORMAT = "<white>{time:HH:mm:ss}</white> | <level>{level: <8}</level> | <white>{message}</white>"
 CONSOLE_LOG_FORMAT = "<white>{time:HH:mm:ss}</white> | <level>{level: <8}</level> | <white>{message}</white>"

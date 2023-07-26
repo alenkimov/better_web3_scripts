@@ -8,7 +8,6 @@ from .paths import CONFIG_TOML
 class Config(BaseModel):
     LOGGING_LEVEL: LoggingLevel
     WAIT_FOR_TX_RECEIPT: bool
-    REQUEST_BALANCES: bool
     HIDE_SECRETS: bool
     AUTO_OPEN: bool
 
