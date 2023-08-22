@@ -23,3 +23,13 @@ copy_file(DEFAULT_CONFIG_TOML, CONFIG_TOML)
 DEFAULT_CHAINS_TOML = DEFAULT_CONFIG_DIR / "chains.toml"
 CHAINS_TOML = CONFIG_DIR / "chains.toml"
 copy_file(DEFAULT_CHAINS_TOML, CHAINS_TOML)
+
+PROXIES_TXT = INPUT_DIR / "proxies.txt"
+ADDRESSES_TXT = INPUT_DIR / "addresses.txt"
+PRIVATE_KEYS_TXT = INPUT_DIR / "private_keys.txt"
+PRIVATE_KEY_TO_ADDRESS_TXT = INPUT_DIR / "private_key_to_address.txt"
+
+INPUT_FILES = [PROXIES_TXT, ADDRESSES_TXT, PRIVATE_KEYS_TXT, PRIVATE_KEY_TO_ADDRESS_TXT]
+
+for filepath in INPUT_FILES:
+    filepath.touch(exist_ok=True)

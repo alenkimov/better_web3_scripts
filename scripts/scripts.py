@@ -8,7 +8,7 @@ import questionary
 import tqdm
 from tqdm.asyncio import tqdm as async_tqdm
 from better_web3 import Chain
-from better_web3.utils import write_lines, addresses_from_file
+from better_web3.utils import write_lines
 from better_web3 import Wallet
 from eth_typing import ChecksumAddress
 from eth_utils import to_wei, from_wei
@@ -17,41 +17,26 @@ from web3.types import Wei
 
 from .config import CONFIG
 from .logger import logger
-from .paths import INPUT_DIR, OUTPUT_DIR
+from .paths import OUTPUT_DIR
 from .proxy import Proxy, ProxyInfo
-from ._scripts import process_proxies, curry_async, ask_chain, ask_private_key
-
-PROXIES_TXT = INPUT_DIR / "proxies.txt"
-ADDRESSES_TXT = INPUT_DIR / "addresses.txt"
-PRIVATE_KEYS_TXT = INPUT_DIR / "private_keys.txt"
-
-INPUT_FILES = [PROXIES_TXT, ADDRESSES_TXT, PRIVATE_KEYS_TXT]
-
-for filepath in INPUT_FILES:
-    filepath.touch(exist_ok=True)
-
-PROXIES = Proxy.from_file(PROXIES_TXT)
-logger.info(f"Proxies: {len(PROXIES)}")
-
-ADDRESSES = addresses_from_file(ADDRESSES_TXT)
-logger.info(f"Addresses: {len(ADDRESSES)}")
-
-WALLETS = Wallet.from_file(PRIVATE_KEYS_TXT)
-logger.info(f"Private keys: {len(WALLETS)}")
+from ._scripts import process_proxies
+from .input import ADDRESSES, PROXIES, PRIVATE_KEY_TO_ADDRESSES, WALLETS
+from better_automation.utils import curry_async
+from .questions import ask_chain, ask_private_key, ask_float, ask_int
 
 
-def native_token_balances():
+async def native_token_balances():
     if not ADDRESSES:
         logger.warning(f"There are no addresses!")
         return
 
-    chain = ask_chain()
-    balances_generator = chain.batch_request.balances(ADDRESSES, raise_exceptions=False)
+    chain = await ask_chain()
+    raw_balances = [raw_balance_data async for raw_balance_data in chain.batch_request.balances(ADDRESSES, raise_exceptions=False)]
 
     balances_txt = OUTPUT_DIR / "balances.txt"
     balances = []
 
-    for i, balance_data in enumerate(balances_generator, start=1):
+    for i, balance_data in enumerate(raw_balances, start=1):
         address = balance_data["address"]
         if "balance" in balance_data:
             balance = from_wei(balance_data["balance"], "ether")
@@ -68,7 +53,7 @@ def native_token_balances():
         webbrowser.open(balances_txt)
 
 
-def transfer_native_tokens(
+async def transfer_native_tokens(
         chain: Chain,
         wallets_from: list[Wallet],
         addresses_to: list[ChecksumAddress],
@@ -76,18 +61,16 @@ def transfer_native_tokens(
         wait_for_tx_receipt: bool = False,
 ):
     for wallet, address in zip(wallets_from, addresses_to):
-        tx_hash = chain.transfer(wallet.account, address, value, gas_price=to_wei(1.5, "gwei"))
-        tx_hash_link = chain.get_link_by_tx_hash(tx_hash)
-        logger.info(f"{wallet} {tx_hash_link}")
+        tx_hash = await chain.transfer(wallet.account, address, value)
         logger.info(f"\tSent {from_wei(value, 'ether')} {chain.token.symbol} to {address}")
         if wait_for_tx_receipt:
-            tx_receipt = chain.wait_for_tx_receipt(tx_hash)
-            tx_fee_wei = tx_receipt.gasUsed * tx_receipt.effectiveGasPrice
-            tx_fee = from_wei(tx_fee_wei, "ether")
-            logger.info(f"\tFee: {tx_fee} {chain.token.symbol}")
+            tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
+            logger.info(wallet.tx_receipt(chain, tx_receipt))
+        else:
+            logger.info(wallet.tx_hash(chain, tx_hash))
 
 
-def _disperse_native_tokens(
+async def _disperse_native_tokens(
         chain: Chain,
         wallet: Wallet,
         addresses_to: list[ChecksumAddress],
@@ -95,7 +78,7 @@ def _disperse_native_tokens(
         wait_for_tx_receipt: bool = True,
 ):
     total_value_wei = sum(values)
-    wallet_balance_wei = chain.get_balance(wallet.address)
+    wallet_balance_wei = await chain.get_balance(wallet.address)
     if total_value_wei > wallet_balance_wei:
         logger.error(f"{total_value_wei} > {wallet_balance_wei}")
         return
@@ -111,42 +94,61 @@ def _disperse_native_tokens(
      ==[gETH 0.01]==>> 0xc278c6B61C33A97e39cE5603Caa8A0235839B2b0
     """
 
-    disperse_ether_fn = chain.disperse.disperse_ether(addresses_to, values)
-    tx = chain.build_tx(disperse_ether_fn, address_from=wallet.address, value=total_value_wei)
-    tx_hash = chain.sign_and_send_tx(wallet.account, tx)
-    logger.info(f"tx: {chain.get_link_by_tx_hash(tx_hash)}")
-    """output
-    tx: https://goerli.etherscan.io/tx/0xdb7a3a03c49752aabb96207508269493eb35762249ad1b4e90a97685cb899571
-    """
+    disperse_ether_fn = await chain.disperse.disperse_ether(addresses_to, values)
+    tx = await chain.build_tx(disperse_ether_fn, address_from=wallet.address, value=total_value_wei)
+    tx_hash = await chain.sign_and_send_tx(wallet.account, tx)
 
     if wait_for_tx_receipt:
-        chain.wait_for_tx_receipt(tx_hash)
+        tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
+        logger.info(wallet.tx_receipt(chain, tx_receipt))
+    else:
+        logger.info(wallet.tx_hash(chain, tx_hash))
 
 
-def disperse_native_tokens():
+async def transfer_from_wallet(wallet, addresses, chain, value):
+    for address in addresses:
+        tx_hash = await chain.transfer(wallet.account, address, value)
+        tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
+        logger.info(wallet.tx_receipt(chain, tx_receipt))
+        await asyncio.sleep(10)
+
+
+async def transfer_from_wallet_to_address():
+    if not PRIVATE_KEY_TO_ADDRESSES:
+        logger.warning(f"No wallets to transfer!")
+        return
+
+    chain = await ask_chain()
+    value = await ask_float(min=0)
+    value = to_wei(value, "ether")
+
+    tasks = []
+    for private_key, addresses in PRIVATE_KEY_TO_ADDRESSES.items():
+        wallet = Wallet.from_key(private_key)
+        tasks.append(transfer_from_wallet(wallet, addresses, chain, value))
+
+    await asyncio.gather(*tasks)
+
+
+async def disperse_native_tokens():
     if not ADDRESSES:
         logger.warning(f"There are no addresses!")
         return
 
-    chain = ask_chain()
+    chain = await ask_chain()
 
-    private_key = ask_private_key()
+    private_key = await ask_private_key()
     wallet = Wallet.from_key(private_key)
     logger.info(f"{wallet}")
 
-    value = questionary.text(f"Enter value (float):").ask()
-    try:
-        value = float(value)
-    except ValueError:
-        logger.error(f"Wrong float value")
-        return
+    value = await ask_float(min=0)
     values = [to_wei(value, "ether")] * len(ADDRESSES)
     logger.info(f"To send: {value} {chain.token.symbol}")
 
-    _disperse_native_tokens(chain, wallet, ADDRESSES, values)
+    await _disperse_native_tokens(chain, wallet, ADDRESSES, values)
 
 
-def private_keys_to_address():
+async def private_keys_to_address():
     if not WALLETS:
         logger.warning(f"There are no private keys!")
         return
@@ -159,14 +161,8 @@ def private_keys_to_address():
         webbrowser.open(wallets_txt)
 
 
-def generate_wallets():
-    value = questionary.text(f"Enter count (int):").ask()
-    try:
-        count = int(value)
-    except ValueError:
-        logger.error(f"Wrong int value")
-        return
-
+async def generate_wallets():
+    count = await ask_int("Enter count (int)", min=1)
     wallets_txt = OUTPUT_DIR / "wallets.txt"
     wallets = [Wallet.generate() for _ in tqdm.trange(count)]
     write_lines(wallets_txt, [f"{wallet.private_key}:{wallet.address}" for wallet in wallets])
@@ -188,5 +184,5 @@ async def request_proxies_info_aiohttp(proxies: Iterable[Proxy]):
         await process_proxies(proxies, await curry_async(request_and_set_proxy_info)(session))
 
 
-def check_proxies():
-    asyncio.run(request_proxies_info_aiohttp(PROXIES))
+async def check_proxies():
+    await request_proxies_info_aiohttp(PROXIES)

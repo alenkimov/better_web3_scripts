@@ -1,42 +1,12 @@
 import asyncio
 from asyncio import Semaphore
-from contextlib import contextmanager, asynccontextmanager
-from datetime import datetime
 from typing import Iterable
 
-import questionary
-from aiohttp.client_exceptions import ContentTypeError
-from better_web3 import Chain, JSONRPCException, Wallet, Proxy
-from eth_typing import HexStr
-from eth_utils import from_wei, to_wei
+from better_web3 import Wallet
 from tqdm.asyncio import tqdm
-from web3 import Web3
-from web3.contract.contract import ContractFunction
-from web3.exceptions import ContractLogicError
-from web3.types import Wei
 
-from .chains import CHAINS as _CHAINS
 from .logger import logger
-
-
-CHAINS = {chain.name: chain for chain in _CHAINS.values()}
-
-
-def ask_chain() -> Chain:
-    chain_name = questionary.select(f"Choose a chain:", choices=CHAINS).ask()
-    return CHAINS[chain_name]
-
-
-def ask_private_key() -> str:
-    return questionary.password(f"Enter a private key:").ask()
-
-
-def curry_async(async_func):
-    async def curried(*args, **kwargs):
-        def bound_async_func(*args2, **kwargs2):
-            return async_func(*(args + args2), **{**kwargs, **kwargs2})
-        return bound_async_func
-    return curried
+from .proxy import Proxy
 
 
 async def sleep(wallet: Wallet, delay: float):

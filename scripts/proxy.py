@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel
 
-from better_web3 import Proxy as _Proxy
+from better_proxy import Proxy as _Proxy
 
 
 class ProxyInfo(BaseModel):

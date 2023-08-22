@@ -1,9 +1,15 @@
 # Better Web3.py scripts
-[ [Telegram](https://t.me/cum_insider) ]
+[![Telegram channel](https://img.shields.io/endpoint?url=https://runkit.io/damiankrawczyk/telegram-badge/branches/master?url=https://t.me/cum_insider)](https://t.me/cum_insider)
 
-Инструменты для работы с web3 с использованием библиотеки [better-web3](https://github.com/alenkimov/better_web3):
+Инструменты для работы с web3:
 - Генерация кошельков
-- Проверка прокси на работоспособность
-- Disperse нативных токенов
+- Проверка прокси
 - Запрос балансов нативных токенов
-- Адреса кошельков из приватных ключей
+- Disperse нативных токенов
+- Получение адресов кошельков из приватных ключей
+- Раскидка токенов формата `private_key:address`
+
+Используемые библиотеки:
+- [better-web3](https://github.com/alenkimov/better_web3)
+- [better-proxy](https://github.com/alenkimov/better_proxy)
+- [better-automation](https://github.com/alenkimov/better_automation)
