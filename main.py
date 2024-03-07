@@ -4,6 +4,7 @@ import asyncio
 from scripts.config import CONFIG
 from scripts.paths import LOG_DIR
 from common.logger import setup_logger
+from common import print_author_info, print_project_info
 
 from scripts.scripts import (
     generate_wallets,
@@ -27,6 +28,8 @@ MODULES = {
 
 async def main():
     while True:
+        print_project_info()
+        print_author_info()
         module_name = await questionary.select("What do you want?", choices=list(MODULES.keys())).ask_async()
         module = MODULES[module_name]
 
