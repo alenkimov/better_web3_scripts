@@ -12,4 +12,3 @@
 Используемые библиотеки:
 - [better-web3](https://github.com/alenkimov/better_web3)
 - [better-proxy](https://github.com/alenkimov/better_proxy)
-- [better-automation](https://github.com/alenkimov/better_automation)
