@@ -5,4 +5,4 @@ log
 input
 output
 config/*
-!config/default
+!config/.default

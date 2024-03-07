@@ -1,21 +1,21 @@
 [tool.poetry]
 name = "better-web3-scripts"
-version = "1.2.0"
-description = "Web3.py tools and scripts"
+version = "2.0.0"
+description = "Web3 scripts"
 authors = ["Alen <alen.kimov@gmail.com>"]
 readme = "README.md"
-packages = [{include = "scripts"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-questionary = "^2.0.0"
-tqdm = "^4.66.1"
-loguru = "^0.7.0"
-pydantic = "^2.2.1"
-better-web3 = "^3.0.2"
-better-automation = "^0.2.1"
-better-proxy = "^0.2.0"
+better-web3 = "3.2.1"
+questionary = "^2"
+tqdm = "^4.66"
+loguru = "^0.7"
+pydantic = ">=1"
 
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.2.0"
 
 [build-system]
 requires = ["poetry-core"]

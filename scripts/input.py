@@ -1,15 +1,12 @@
 from collections import defaultdict
 
+from loguru import logger
+
 from better_web3.utils import addresses_from_file, load_lines
 from better_web3 import Wallet
 
-from .logger import logger
-from .paths import PROXIES_TXT, ADDRESSES_TXT, PRIVATE_KEYS_TXT, PRIVATE_KEY_TO_ADDRESS_TXT
-from .proxy import Proxy
+from .paths import ADDRESSES_TXT, PRIVATE_KEYS_TXT, PRIVATE_KEY_TO_ADDRESS_TXT
 
-
-PROXIES = Proxy.from_file(PROXIES_TXT)
-logger.info(f"Proxies: {len(PROXIES)}")
 
 ADDRESSES = addresses_from_file(ADDRESSES_TXT)
 logger.info(f"Addresses: {len(ADDRESSES)}")

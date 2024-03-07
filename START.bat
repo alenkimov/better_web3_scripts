@@ -1,3 +1,3 @@
 @echo off
-poetry run python start.py
+poetry run python main.py
 pause

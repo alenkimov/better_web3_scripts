@@ -2,9 +2,10 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
+from tqdm.asyncio import tqdm
 
 from loguru import logger
-from tqdm.asyncio import tqdm
+
 
 LoggingLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "SUCCESS"]
 
@@ -29,11 +30,12 @@ class InterceptHandler(logging.Handler):
         logger_opt.log(self._get_level(record), record.getMessage())
 
 
-def setup_logger(log_dir: Path, level: LoggingLevel = "DEBUG"):
-    log_dir.mkdir(exist_ok=True)
+def setup_logger(log_dir: Path, level: LoggingLevel = "INFO") -> InterceptHandler:
     logger.remove()
     log_filename = f"{datetime.now().strftime('%d-%m-%Y')}.log"
     log_filepath = Path(log_dir, log_filename)
-    logging.basicConfig(handlers=[InterceptHandler()], level=logging.INFO)
+    handler = InterceptHandler()
+    logging.basicConfig(handlers=[handler], level=logging.DEBUG)
     logger.add(log_filepath, format=FILE_LOG_FORMAT, level=level, rotation='1 day')
     logger.add(lambda msg: tqdm.write(msg, end=''), colorize=True, format=CONSOLE_LOG_FORMAT, level=level)
+    return handler

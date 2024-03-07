@@ -1,28 +1,23 @@
 import asyncio
-import os
 import webbrowser
 from typing import Iterable
 
-import aiohttp
-import questionary
 import tqdm
-from tqdm.asyncio import tqdm as async_tqdm
-from better_web3 import Chain
+import questionary
+from better_web3 import Chain, Wallet
 from better_web3.utils import write_lines
-from better_web3 import Wallet
 from eth_typing import ChecksumAddress
 from eth_utils import to_wei, from_wei
 from web3.types import Wei
+from loguru import logger
+import web3
 
+from common.ask import ask_int, ask_float
 
 from .config import CONFIG
-from .logger import logger
 from .paths import OUTPUT_DIR
-from .proxy import Proxy, ProxyInfo
-from ._scripts import process_proxies
-from .input import ADDRESSES, PROXIES, PRIVATE_KEY_TO_ADDRESSES, WALLETS
-from better_automation.utils import curry_async
-from .questions import ask_chain, ask_private_key, ask_float, ask_int
+from .input import ADDRESSES, PRIVATE_KEY_TO_ADDRESSES, WALLETS
+from .ask import ask_chain, ask_private_key
 
 
 async def native_token_balances():
@@ -31,7 +26,8 @@ async def native_token_balances():
         return
 
     chain = await ask_chain()
-    raw_balances = [raw_balance_data async for raw_balance_data in chain.batch_request.balances(ADDRESSES, raise_exceptions=False)]
+    raw_balances = [raw_balance_data async for raw_balance_data in
+                    chain.batch_request.balances(ADDRESSES, raise_exceptions=False)]
 
     balances_txt = OUTPUT_DIR / "balances.txt"
     balances = []
@@ -96,7 +92,7 @@ async def _disperse_native_tokens(
 
     disperse_ether_fn = await chain.disperse.disperse_ether(addresses_to, values)
     tx = await chain.build_tx(disperse_ether_fn, address_from=wallet.address, value=total_value_wei)
-    tx_hash = await chain.sign_and_send_tx(wallet.account, tx)
+    tx_hash = await chain.sign_and_send_tx(wallet.eth_account, tx)
 
     if wait_for_tx_receipt:
         tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
@@ -105,9 +101,9 @@ async def _disperse_native_tokens(
         logger.info(wallet.tx_hash(chain, tx_hash))
 
 
-async def transfer_from_wallet(wallet, addresses, chain, value):
+async def transfer_from_wallet(wallet: Wallet, addresses: Iterable, chain: Chain, value):
     for address in addresses:
-        tx_hash = await chain.transfer(wallet.account, address, value)
+        tx_hash = await chain.transfer(wallet.eth_account, address, value)
         tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
         logger.info(wallet.tx_receipt(chain, tx_receipt))
         await asyncio.sleep(10)
@@ -119,15 +115,49 @@ async def transfer_from_wallet_to_address():
         return
 
     chain = await ask_chain()
-    value = await ask_float(min=0)
-    value = to_wei(value, "ether")
 
-    tasks = []
-    for private_key, addresses in PRIVATE_KEY_TO_ADDRESSES.items():
-        wallet = Wallet.from_key(private_key)
-        tasks.append(transfer_from_wallet(wallet, addresses, chain, value))
+    transfer_types = {
+        # "Transfer all balance",
+        "Transfer to minimal balance": 1,
+        "Transfer value": 2,
+        # "Transfer random value",
+        # "Transfer value (from file)",
+    }
 
-    await asyncio.gather(*tasks)
+    transfer_type_name = await questionary.select(f"Choose a transfer type:", choices=transfer_types).ask_async()
+    transfer_type_number = transfer_types[transfer_type_name]
+
+    if transfer_type_number == 1:
+        minimal_value = await ask_float("Enter minimal value:", min=0)
+        minimal_value = to_wei(minimal_value, "ether")
+
+        for private_key, addresses in PRIVATE_KEY_TO_ADDRESSES.items():
+            wallet = Wallet.from_key(private_key)
+            for address in addresses:
+                balance = await chain.get_balance(wallet.address)
+                logger.info(f"{wallet} {chain} {chain.token.symbol} balance: {from_wei(balance, 'ether')}")
+                value_to_transfer = balance - minimal_value
+                if value_to_transfer > 0:
+                    logger.info(f"{wallet} -> {address} {chain} {chain.token.symbol} to transfer: {from_wei(value_to_transfer, 'ether')}")
+                    tx_hash = await chain.transfer(wallet.eth_account, address, value_to_transfer)
+                    logger.info(wallet.tx_hash(chain, tx_hash))
+                    if CONFIG.TRANSACTION.WAIT_FOR_TX_RECEIPT:
+                        try:
+                            tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
+                            logger.info(wallet.tx_receipt(chain, tx_receipt))
+                        except web3.exceptions.TimeExhausted as exc:
+                            logger.warning(f"{wallet} {chain} {exc}")
+
+    elif transfer_type_number == 2:
+        value = await ask_float(min=0)
+        value = to_wei(value, "ether")
+
+        tasks = []
+        for private_key, addresses in PRIVATE_KEY_TO_ADDRESSES.items():
+            wallet = Wallet.from_key(private_key)
+            tasks.append(transfer_from_wallet(wallet, addresses, chain, value))
+
+        await asyncio.gather(*tasks)
 
 
 async def disperse_native_tokens():
@@ -170,19 +200,3 @@ async def generate_wallets():
 
     if CONFIG.AUTO_OPEN:
         webbrowser.open(wallets_txt)
-
-
-async def request_and_set_proxy_info(session: aiohttp.ClientSession, proxy: Proxy):
-    async with session.get(f"https://ipapi.co/json/", proxy=proxy.as_url) as response:
-        data = await response.json()
-        proxy.info = ProxyInfo(**data)
-        logger.success(f"{proxy} {proxy.info.country_name}")
-
-
-async def request_proxies_info_aiohttp(proxies: Iterable[Proxy]):
-    async with aiohttp.ClientSession() as session:
-        await process_proxies(proxies, await curry_async(request_and_set_proxy_info)(session))
-
-
-async def check_proxies():
-    await request_proxies_info_aiohttp(PROXIES)
