@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "better-web3-scripts"
-version = "2.0.0"
+version = "2.1.0"
 description = "Web3 scripts"
 authors = ["Alen <alen.kimov@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-better-web3 = "3.2.1"
+better-web3 = {version="^4.0.0b9", allow-prereleases=true}
 questionary = "^2"
 tqdm = "^4.66"
 loguru = "^0.7"

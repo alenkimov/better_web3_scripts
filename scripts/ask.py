@@ -2,9 +2,9 @@ from better_web3 import Chain
 import questionary
 
 
-from .config import CHAINS
+from .chains import CHAINS
 
-CHAINS_TO_CHOOSE = {chain.name: chain for chain in CHAINS.values()}
+CHAINS_TO_CHOOSE = {chain.name: chain for chain in CHAINS}
 
 
 async def ask_chain() -> Chain:

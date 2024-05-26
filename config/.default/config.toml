@@ -1,4 +1,5 @@
 AUTO_OPEN = true
+CHAIN_IDS = [1, 5, 10, 56, 97, 137, 185, 204]
 
 [LOGGING]
 LEVEL = "INFO"

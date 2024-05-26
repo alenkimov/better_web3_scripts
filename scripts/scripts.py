@@ -1,23 +1,29 @@
 import asyncio
+import random
 import webbrowser
 from typing import Iterable
 
 import tqdm
 import questionary
-from better_web3 import Chain, Wallet
-from better_web3.utils import write_lines
+from better_web3 import Chain
+from common.utils import write_lines
 from eth_typing import ChecksumAddress
-from eth_utils import to_wei, from_wei
+from eth_utils import to_wei, from_wei, to_checksum_address
+from eth_account.signers.local import LocalAccount
+from eth_account import Account
 from web3.types import Wei
 from loguru import logger
 import web3
 
 from common.ask import ask_int, ask_float
 
+from .bridge.comet import CometBridge
 from .config import CONFIG
 from .paths import OUTPUT_DIR
 from .input import ADDRESSES, PRIVATE_KEY_TO_ADDRESSES, WALLETS
-from .ask import ask_chain, ask_private_key
+from .ask import ask_chain
+from .chains import get_chains
+from .tx import tx_hash_info, tx_receipt_info
 
 
 async def native_token_balances():
@@ -26,24 +32,12 @@ async def native_token_balances():
         return
 
     chain = await ask_chain()
-    raw_balances = [raw_balance_data async for raw_balance_data in
-                    chain.batch_request.balances(ADDRESSES, raise_exceptions=False)]
 
     balances_txt = OUTPUT_DIR / "balances.txt"
-    balances = []
-
-    for i, balance_data in enumerate(raw_balances, start=1):
-        address = balance_data["address"]
-        if "balance" in balance_data:
-            balance = from_wei(balance_data["balance"], "ether")
-            logger.info(f"[{i:03}] [{address}] {chain} {chain.token.symbol} {round(balance, 4)}")
-            balances.append(f"{address}:{balance}")
-        else:
-            exception = balance_data["exception"]
-            logger.error(f"[{i:03}] [{address}] {chain} {exception}")
-            balances.append(f"{address}:ERROR")
-
-    write_lines(balances_txt, balances)
+    with open(balances_txt, "w") as file:
+        async for address, balance in chain.balances(ADDRESSES):
+            print(address, balance)
+            file.write("\n".join(f"{address}:{balance}"))
 
     if CONFIG.AUTO_OPEN:
         webbrowser.open(balances_txt)
@@ -51,62 +45,27 @@ async def native_token_balances():
 
 async def transfer_native_tokens(
         chain: Chain,
-        wallets_from: list[Wallet],
+        wallets_from: list[LocalAccount],
         addresses_to: list[ChecksumAddress],
         value: Wei | int,
         wait_for_tx_receipt: bool = False,
 ):
     for wallet, address in zip(wallets_from, addresses_to):
         tx_hash = await chain.transfer(wallet.account, address, value)
-        logger.info(f"\tSent {from_wei(value, 'ether')} {chain.token.symbol} to {address}")
+        logger.info(f"\tSent {from_wei(value, 'ether')} {chain.native_currency.symbol} to {address}")
         if wait_for_tx_receipt:
-            tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
+            tx_receipt = await chain.eth.wait_for_transaction_receipt(tx_hash)
             logger.info(wallet.tx_receipt(chain, tx_receipt))
         else:
             logger.info(wallet.tx_hash(chain, tx_hash))
 
 
-async def _disperse_native_tokens(
-        chain: Chain,
-        wallet: Wallet,
-        addresses_to: list[ChecksumAddress],
-        values: list[Wei | int],
-        wait_for_tx_receipt: bool = True,
-):
-    total_value_wei = sum(values)
-    wallet_balance_wei = await chain.get_balance(wallet.address)
-    if total_value_wei > wallet_balance_wei:
-        logger.error(f"{total_value_wei} > {wallet_balance_wei}")
-        return
-    else:
-        logger.info(f"{wallet} {from_wei(wallet_balance_wei, 'ether')}")
-
-    logger.info(f"Transferring {chain.token.symbol} {from_wei(total_value_wei, 'ether')} from {wallet.address} to:")
-    for recipient, value in zip(addresses_to, values):
-        logger.info(f" ==[{chain.token.symbol} {from_wei(value, 'ether')}]==>> {recipient}")
-    """output
-    Transferring gETH 0.02 from 0x780afe4a82Ed3B46eA6bA94a1BB8F7b977298722 to:
-     ==[gETH 0.01]==>> 0xd87Fa8ac81834c6625519589C38Cb54899F1FBA5
-     ==[gETH 0.01]==>> 0xc278c6B61C33A97e39cE5603Caa8A0235839B2b0
-    """
-
-    disperse_ether_fn = await chain.disperse.disperse_ether(addresses_to, values)
-    tx = await chain.build_tx(disperse_ether_fn, address_from=wallet.address, value=total_value_wei)
-    tx_hash = await chain.sign_and_send_tx(wallet.eth_account, tx)
-
-    if wait_for_tx_receipt:
-        tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
-        logger.info(wallet.tx_receipt(chain, tx_receipt))
-    else:
-        logger.info(wallet.tx_hash(chain, tx_hash))
-
-
-async def transfer_from_wallet(wallet: Wallet, addresses: Iterable, chain: Chain, value):
+async def transfer_from_wallet(wallet: LocalAccount, addresses: Iterable, chain: Chain, value):
     for address in addresses:
-        tx_hash = await chain.transfer(wallet.eth_account, address, value)
-        tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
-        logger.info(wallet.tx_receipt(chain, tx_receipt))
-        await asyncio.sleep(10)
+        tx_hash = await chain.transfer(wallet, to_checksum_address(address), value)
+        tx_receipt = await chain.eth.wait_for_transaction_receipt(tx_hash)
+        logger.info(tx_receipt_info(chain, wallet.address, tx_receipt, value))
+        await asyncio.sleep(61)
 
 
 async def transfer_from_wallet_to_address():
@@ -132,18 +91,18 @@ async def transfer_from_wallet_to_address():
         minimal_value = to_wei(minimal_value, "ether")
 
         for private_key, addresses in PRIVATE_KEY_TO_ADDRESSES.items():
-            wallet = Wallet.from_key(private_key)
+            wallet = Account.from_key(private_key)
             for address in addresses:
-                balance = await chain.get_balance(wallet.address)
-                logger.info(f"{wallet} {chain} {chain.token.symbol} balance: {from_wei(balance, 'ether')}")
+                balance = await chain.eth.get_balance(wallet.address)
+                logger.info(f"{wallet} {chain} {chain.native_currency.symbol} balance: {from_wei(balance, 'ether')}")
                 value_to_transfer = balance - minimal_value
                 if value_to_transfer > 0:
-                    logger.info(f"{wallet} -> {address} {chain} {chain.token.symbol} to transfer: {from_wei(value_to_transfer, 'ether')}")
+                    logger.info(f"{wallet} -> {address} {chain} {chain.native_currency.symbol} to transfer: {from_wei(value_to_transfer, 'ether')}")
                     tx_hash = await chain.transfer(wallet.eth_account, address, value_to_transfer)
                     logger.info(wallet.tx_hash(chain, tx_hash))
                     if CONFIG.TRANSACTION.WAIT_FOR_TX_RECEIPT:
                         try:
-                            tx_receipt = await chain.wait_for_tx_receipt(tx_hash)
+                            tx_receipt = await chain.eth.wait_for_transaction_receipt(tx_hash)
                             logger.info(wallet.tx_receipt(chain, tx_receipt))
                         except web3.exceptions.TimeExhausted as exc:
                             logger.warning(f"{wallet} {chain} {exc}")
@@ -154,33 +113,15 @@ async def transfer_from_wallet_to_address():
 
         tasks = []
         for private_key, addresses in PRIVATE_KEY_TO_ADDRESSES.items():
-            wallet = Wallet.from_key(private_key)
+            wallet = Account.from_key(private_key)
             tasks.append(transfer_from_wallet(wallet, addresses, chain, value))
 
         await asyncio.gather(*tasks)
 
 
-async def disperse_native_tokens():
-    if not ADDRESSES:
-        logger.warning(f"There are no addresses!")
-        return
-
-    chain = await ask_chain()
-
-    private_key = await ask_private_key()
-    wallet = Wallet.from_key(private_key)
-    logger.info(f"{wallet}")
-
-    value = await ask_float(min=0)
-    values = [to_wei(value, "ether")] * len(ADDRESSES)
-    logger.info(f"To send: {value} {chain.token.symbol}")
-
-    await _disperse_native_tokens(chain, wallet, ADDRESSES, values)
-
-
 async def private_keys_to_address():
     if not WALLETS:
-        logger.warning(f"There are no private keys!")
+        logger.warning(f"There are no wallets (private keys)!")
         return
 
     wallets_txt = OUTPUT_DIR / "wallets.txt"
@@ -194,9 +135,62 @@ async def private_keys_to_address():
 async def generate_wallets():
     count = await ask_int("Enter count (int)", min=1)
     wallets_txt = OUTPUT_DIR / "wallets.txt"
-    wallets = [Wallet.generate() for _ in tqdm.trange(count)]
+    wallets = [Account.create() for _ in tqdm.trange(count)]
     write_lines(wallets_txt, [f"{wallet.private_key}:{wallet.address}" for wallet in wallets])
     logger.success(f"Wallets data saved here: {wallets_txt}")
 
     if CONFIG.AUTO_OPEN:
         webbrowser.open(wallets_txt)
+
+
+async def comet_bridge():
+    if not WALLETS:
+        logger.warning(f"There are no wallets (private keys)!")
+        return
+
+    # Optimism,     Mintchain
+    original_chain, target_chain = get_chains((10, 185))
+
+    print(f"Original chain: {original_chain}")
+    print(f"Target chain: {target_chain}")
+
+    original_chain_balances: dict[ChecksumAddress: Wei] = {}
+    target_chain_balances: dict[ChecksumAddress: Wei] = {}
+
+    print(f"target_chain_balances:")
+    async for address, balance in original_chain.balances([wallet.address for wallet in WALLETS]):
+        print(address, balance)
+        original_chain_balances[address] = balance
+
+    print(f"target_chain_balances:")
+    async for address, balance in target_chain.balances([wallet.address for wallet in WALLETS]):
+        print(address, balance)
+        target_chain_balances[address] = balance
+
+    only_empty_wallets = await questionary.confirm(f"Bridge only empty wallets?").ask_async()
+
+    minimal_value = await ask_float("Enter minimal value:", min=0)
+    minimal_value = to_wei(minimal_value, "ether")
+
+    maximum_value = await ask_float("Enter maximum value:", min=0)
+    maximum_value = to_wei(maximum_value, "ether")
+
+    comet = CometBridge(original_chain)
+
+    for wallet in WALLETS:
+        original_chain_balance = original_chain_balances[wallet.address]
+
+        if original_chain_balance == 0:
+            logger.info(f"[{wallet.address}] Wallet skipped (empty original chain balance).")
+            continue
+
+        target_chain_balance = target_chain_balances[wallet.address]
+        if only_empty_wallets and target_chain_balance > 0:
+            logger.info(f"[{wallet.address}] Wallet skipped (non-empty target chain balance)."
+                        f"\n\tBalance (Wei): {target_chain_balance}")
+            continue
+
+        value = random.randint(minimal_value, maximum_value)
+        tx_hash = await comet.bridge(wallet, value, await target_chain.eth.chain_id)
+        print(tx_hash_info(comet.chain, wallet.address, tx_hash, value))
+        ...
