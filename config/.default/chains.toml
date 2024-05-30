@@ -3,12 +3,12 @@
 # batch_request_size = 500
 # max_fee_per_gas = 1.1  # gwei
 
-# [5]  # Goerli
-# rpc = "https://eth-goerli.public.blastapi.io"
-
-# [10]
-# rpc = "https://1rpc.io/op"
-# batch_request_size = 1
-
 # [185]  # Mintchain
 # proxy = "ip:port:user:password" # any format
+
+[5]  # Goerli
+rpc = "https://eth-goerli.public.blastapi.io"
+
+[10]
+rpc = "https://rpc.ankr.com/optimism"
+batch_request_size = 10

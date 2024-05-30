@@ -27,7 +27,7 @@ MODULES = {
     "Private keys to addresses": private_keys_to_address,
     "Transfer (Wallet -> Addresses)": transfer_from_wallet_to_address,
     "Native token balances": native_token_balances,
-    # "Comet bridge (ETH OP -> Mintchain)": comet_bridge,
+    "Comet bridge (ETH OP -> Mintchain)": comet_bridge,
     "Quit": quit,
 }
 

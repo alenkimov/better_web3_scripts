@@ -17,7 +17,7 @@ import web3
 
 from common.ask import ask_int, ask_float
 
-from .bridge.comet import CometBridge
+from .comet import CometBridge
 from .config import CONFIG
 from .paths import OUTPUT_DIR
 from .input import ADDRESSES, PRIVATE_KEY_TO_ADDRESSES, WALLETS
@@ -157,7 +157,7 @@ async def comet_bridge():
     original_chain_balances: dict[ChecksumAddress: Wei] = {}
     target_chain_balances: dict[ChecksumAddress: Wei] = {}
 
-    print(f"target_chain_balances:")
+    print(f"original_chain_balances:")
     async for address, balance in original_chain.balances([wallet.address for wallet in WALLETS]):
         print(address, balance)
         original_chain_balances[address] = balance
@@ -191,6 +191,5 @@ async def comet_bridge():
             continue
 
         value = random.randint(minimal_value, maximum_value)
-        tx_hash = await comet.bridge(wallet, value, await target_chain.eth.chain_id)
+        tx_hash = await comet.bridge_eth(wallet, value, await target_chain.eth.chain_id)
         print(tx_hash_info(comet.chain, wallet.address, tx_hash, value))
-        ...

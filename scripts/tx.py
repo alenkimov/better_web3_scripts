@@ -6,8 +6,8 @@ from better_web3 import Chain
 
 def tx_hash_info(chain: Chain, address: str, tx_hash: HexStr | str, value: Wei | int = None) -> str:
     message = f"[{address}] ({chain}) {tx_hash}"
-    for explorer_name, url in chain.tx_urls(tx_hash).items():
-        message += f"\n\t[URL] {explorer_name}: {url}"
+    for explorer, url in chain.tx_urls(tx_hash):
+        message += f"\n\t[URL] {explorer.name} {url}"
     if value is not None:
         message += f"\n\tSent: {from_wei(value, "ether")} {chain.native_currency.symbol}"
     return message
