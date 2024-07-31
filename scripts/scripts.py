@@ -100,12 +100,6 @@ async def transfer_from_wallet_to_address():
                     logger.info(f"{wallet} -> {address} {chain} {chain.native_currency.symbol} to transfer: {from_wei(value_to_transfer, 'ether')}")
                     tx_hash = await chain.transfer(wallet, to_checksum_address(address), value_to_transfer)
                     logger.info(wallet.tx_hash(chain, tx_hash))
-                    if CONFIG.TRANSACTION.WAIT_FOR_TX_RECEIPT:
-                        try:
-                            tx_receipt = await chain.eth.wait_for_transaction_receipt(tx_hash)
-                            logger.info(wallet.tx_receipt(chain, tx_receipt))
-                        except web3.exceptions.TimeExhausted as exc:
-                            logger.warning(f"{wallet} {chain} {exc}")
 
     elif transfer_type_number == 2:
         value = await ask_float(min=0)
