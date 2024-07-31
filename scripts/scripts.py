@@ -98,7 +98,7 @@ async def transfer_from_wallet_to_address():
                 value_to_transfer = balance - minimal_value
                 if value_to_transfer > 0:
                     logger.info(f"{wallet} -> {address} {chain} {chain.native_currency.symbol} to transfer: {from_wei(value_to_transfer, 'ether')}")
-                    tx_hash = await chain.transfer(wallet.eth_account, address, value_to_transfer)
+                    tx_hash = await chain.transfer(wallet, to_checksum_address(address), value_to_transfer)
                     logger.info(wallet.tx_hash(chain, tx_hash))
                     if CONFIG.TRANSACTION.WAIT_FOR_TX_RECEIPT:
                         try:
