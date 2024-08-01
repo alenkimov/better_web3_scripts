@@ -99,7 +99,7 @@ async def transfer_from_wallet_to_address():
                 if value_to_transfer > 0:
                     logger.info(f"{wallet} -> {address} {chain} {chain.native_currency.symbol} to transfer: {from_wei(value_to_transfer, 'ether')}")
                     tx_hash = await chain.transfer(wallet, to_checksum_address(address), value_to_transfer)
-                    logger.info(wallet.tx_hash(chain, tx_hash))
+                    logger.info(tx_hash_info(chain, wallet.address, tx_hash))
 
     elif transfer_type_number == 2:
         value = await ask_float(min=0)
